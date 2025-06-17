@@ -4,7 +4,9 @@
   "private": true,
   "dependencies": {
     "node-fetch": "^2.7.0",
-    "node-telegram-bot-api": "^0.66.0"
+    "node-telegram-bot-api": "^0.66.0",
+    "puppeteer": "^24.10.1",
+    "tesseract.js": "^6.0.1"
   },
   "scripts": {
     "start": "node index.js"
