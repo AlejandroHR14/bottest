@@ -1,0 +1,12 @@
+{
+  "name": "bot",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {
+    "node-fetch": "^2.7.0",
+    "node-telegram-bot-api": "^0.66.0"
+  },
+  "scripts": {
+    "start": "node index.js"
+  }
+}
