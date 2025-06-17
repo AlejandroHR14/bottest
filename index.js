@@ -27,16 +27,17 @@ bot.on('message', async (msg) => {
 
         try {
             const response = await fetch(`https://metabet-backend-450162411664.us-central1.run.app/api/v1/get-client-data/${text}`, {
-                method: 'GET',
-                headers: {
-                    'auth': 'RgIRSnarffsoECCyiZso',
-                    'content-type': 'application/json',
-                    'sec-ch-ua': '"Google Chrome";v="137", "Chromium";v="137", "Not/A)Brand";v="24"',
-                    'sec-ch-ua-mobile': '?0',
-                    'sec-ch-ua-platform': '"Windows"',
-                    'Referer': 'https://agente-betgpt.web.app/',
-                    'Referrer-Policy': 'strict-origin-when-cross-origin'
-                }
+                "headers": {
+                    "auth": "RgIRSnarffsoECCyiZso",
+                    "content-type": "application/json",
+                    "sec-ch-ua": "\"Google Chrome\";v=\"137\", \"Chromium\";v=\"137\", \"Not/A)Brand\";v=\"24\"",
+                    "sec-ch-ua-mobile": "?0",
+                    "sec-ch-ua-platform": "\"Windows\"",
+                    "Referer": "https://agente-betgpt.web.app/",
+                    "Referrer-Policy": "strict-origin-when-cross-origin"
+                },
+                "body": null,
+                "method": "GET"
             });
             const clientData = await response.json();
             console.log(clientData);
