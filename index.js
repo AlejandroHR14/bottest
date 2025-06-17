@@ -5,6 +5,9 @@ const path = require('path');
 const https = require('https');
 const { createWorker } = require('tesseract.js');
 
+// CONFIGURAR ZONA HORARIA DE LA PAZ, BOLIVIA
+process.env.TZ = 'America/La_Paz';
+
 const TOKEN = '7909919464:AAEhoJUdqgVrog1OrGmI4S9YYanuDvRz0VA';
 const bot = new TelegramBot(TOKEN, { polling: true });
 
@@ -39,17 +42,38 @@ if (!fs.existsSync(receiptsDir)) {
     fs.mkdirSync(receiptsDir, { recursive: true });
 }
 
-// Función para obtener la fecha actual en formato YYYY-MM-DD
-function getTodayDate() {
-    const today = new Date();
-    return today.toISOString().split('T')[0];
+// Función helper para obtener hora de Bolivia
+function getBoliviaTime(date = new Date()) {
+    // Bolivia está en UTC-4
+    return new Date(date.toLocaleString("en-US", {timeZone: "America/La_Paz"}));
 }
 
-// Función para obtener la fecha de ayer en formato YYYY-MM-DD
+// Función para obtener la fecha actual en formato YYYY-MM-DD (Bolivia)
+function getTodayDate() {
+    const today = new Date();
+    // Asegurar zona horaria de Bolivia
+    const boliviaTime = getBoliviaTime(today);
+    return boliviaTime.toISOString().split('T')[0];
+}
+
+// Función para obtener la fecha de hoy en formato DD/MM/YYYY (para validación de comprobantes - Bolivia)
+function getTodayDateFormatted() {
+    const today = new Date();
+    // Asegurar zona horaria de Bolivia
+    const boliviaTime = getBoliviaTime(today);
+    const dd = String(boliviaTime.getDate()).padStart(2, '0');
+    const mm = String(boliviaTime.getMonth() + 1).padStart(2, '0');
+    const yyyy = boliviaTime.getFullYear();
+    return `${dd}/${mm}/${yyyy}`;
+}
+
+// Función para obtener la fecha de ayer en formato YYYY-MM-DD (Bolivia)
 function getYesterdayDate() {
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
-    return yesterday.toISOString().split('T')[0];
+    // Asegurar zona horaria de Bolivia
+    const boliviaTime = getBoliviaTime(yesterday);
+    return boliviaTime.toISOString().split('T')[0];
 }
 
 // Función para registrar una recarga
@@ -316,7 +340,7 @@ async function makeApiRequest(endpoint, method = 'GET', body = null, userNumber 
     });
 }
 
-// Función para validar comprobante con OCR
+// Función para validar comprobante con OCR - CON ZONA HORARIA BOLIVIA
 async function validateReceipt(filePath, expectedAmount, paymentRequestTime) {
     console.log(`Validando comprobante: ${filePath}, monto esperado: ${expectedAmount}`);
 
@@ -351,11 +375,14 @@ async function validateReceipt(filePath, expectedAmount, paymentRequestTime) {
             text.includes(`Bs ${amountStr}`) ||
             text.includes(`${expectedAmount}`); // También sin decimales
 
-        // 3. Validar fecha (debe ser de hoy) - Formatos múltiples
+        // 3. Validar fecha (debe ser de hoy) - Formatos múltiples CON ZONA HORARIA BOLIVIA
         const today = new Date();
-        const dd = String(today.getDate()).padStart(2, '0');
-        const mm = String(today.getMonth() + 1).padStart(2, '0');
-        const yyyy = today.getFullYear();
+        // Convertir a hora de Bolivia
+        const boliviaToday = getBoliviaTime(today);
+
+        const dd = String(boliviaToday.getDate()).padStart(2, '0');
+        const mm = String(boliviaToday.getMonth() + 1).padStart(2, '0');
+        const yyyy = boliviaToday.getFullYear();
 
         // Formatos numéricos
         const todayFormatted = `${dd}/${mm}/${yyyy}`; // DD/MM/YYYY
@@ -372,9 +399,9 @@ async function validateReceipt(filePath, expectedAmount, paymentRequestTime) {
             'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
         ];
 
-        const mesActual = meses[today.getMonth()];
-        const mesActualMayus = mesesMayus[today.getMonth()];
-        const diaNumero = today.getDate(); // Sin ceros a la izquierda
+        const mesActual = meses[boliviaToday.getMonth()];
+        const mesActualMayus = mesesMayus[boliviaToday.getMonth()];
+        const diaNumero = boliviaToday.getDate(); // Sin ceros a la izquierda
 
         // Formatos en español con diferentes variaciones
         const todaySpanish1 = `${diaNumero} de ${mesActual}, ${yyyy}`;
@@ -407,9 +434,9 @@ async function validateReceipt(filePath, expectedAmount, paymentRequestTime) {
             text.includes(todaySpanish9) ||
             text.includes(todaySpanish10);
 
-        console.log(`Buscando fechas: ${todayFormatted}, ${todaySpanish1}, ${todaySpanish5}, ${todaySpanish10}`);
+        console.log(`Buscando fechas Bolivia: ${todayFormatted}, ${todaySpanish1}, ${todaySpanish5}, ${todaySpanish10}`);
 
-        // 4. Validar tiempo (máximo 5 minutos después de la solicitud)
+        // 4. Validar tiempo CON ZONA HORARIA BOLIVIA
         // Extraer la hora del texto (formato común: HH:MM:SS, HH:MM, formato 12h con AM/PM)
         const timeRegex12h = /(\d{1,2}):(\d{2}):?(\d{2})?\s*(AM|PM)/gi;
         const timeRegex24h = /(\d{1,2}):(\d{2}):?(\d{2})?/g;
@@ -440,36 +467,40 @@ async function validateReceipt(filePath, expectedAmount, paymentRequestTime) {
                 }
             }
 
-            // Obtener la fecha/hora de cuando se solicitó el QR
+            // Obtener la fecha/hora de cuando se solicitó el QR EN HORA DE BOLIVIA
             const paymentDate = typeof paymentRequestTime === 'number'
                 ? new Date(paymentRequestTime)
                 : paymentRequestTime;
 
-            // Crear la fecha/hora del comprobante usando la fecha actual (hoy)
+            // Convertir paymentDate a hora de Bolivia para comparación correcta
+            const paymentDateBolivia = getBoliviaTime(paymentDate);
+
+            // Crear la fecha/hora del comprobante usando la fecha actual de Bolivia
             const receiptTime = new Date();
-            receiptTime.setHours(hours, minutes, seconds, 0);
+            const boliviaTime = getBoliviaTime(receiptTime);
+            boliviaTime.setHours(hours, minutes, seconds, 0);
 
             // Calcular diferencia en milisegundos
-            let timeDifference = receiptTime.getTime() - paymentDate.getTime();
+            let timeDifference = boliviaTime.getTime() - paymentDateBolivia.getTime();
 
             // Si la diferencia es muy grande (más de 12 horas), probablemente sea de otro día
             if (timeDifference < -12 * 60 * 60 * 1000) {
-                receiptTime.setDate(receiptTime.getDate() + 1);
-                timeDifference = receiptTime.getTime() - paymentDate.getTime();
+                boliviaTime.setDate(boliviaTime.getDate() + 1);
+                timeDifference = boliviaTime.getTime() - paymentDateBolivia.getTime();
             } else if (timeDifference > 12 * 60 * 60 * 1000) {
-                receiptTime.setDate(receiptTime.getDate() - 1);
-                timeDifference = receiptTime.getTime() - paymentDate.getTime();
+                boliviaTime.setDate(boliviaTime.getDate() - 1);
+                timeDifference = boliviaTime.getTime() - paymentDateBolivia.getTime();
             }
 
             const differenceMinutes = Math.abs(timeDifference) / (1000 * 60);
 
-            // CORRECCIÓN: Permitir comprobantes que sean hasta 2 minuto ANTES o hasta 5 minutos DESPUÉS
+            // CORRECCIÓN: Permitir comprobantes que sean hasta 2 minutos ANTES o hasta 5 minutos DESPUÉS
             // Esto cubre casos donde el usuario tomó captura justo antes de que llegue la notificación
-            validations.correctTime = (timeDifference >= -120000 && differenceMinutes <= 5); // -120000ms = -2 minuto
+            validations.correctTime = (timeDifference >= -120000 && differenceMinutes <= 5); // -120000ms = -2 minutos
 
             console.log(`Formato detectado: ${is12HourFormat ? '12h (AM/PM)' : '24h'}`);
-            console.log(`Hora QR solicitado: ${paymentDate.toLocaleTimeString()}`);
-            console.log(`Hora del comprobante: ${receiptTime.toLocaleTimeString()}`);
+            console.log(`Hora QR solicitado (Bolivia): ${paymentDateBolivia.toLocaleTimeString()}`);
+            console.log(`Hora del comprobante (Bolivia): ${boliviaTime.toLocaleTimeString()}`);
             console.log(`Diferencia: ${(timeDifference / (1000 * 60)).toFixed(2)} minutos`);
             console.log(`Diferencia absoluta: ${differenceMinutes.toFixed(2)} minutos`);
             console.log(`Comprobante válido por tiempo: ${validations.correctTime}`);
@@ -798,7 +829,9 @@ bot.onText(/\/report/, (msg) => {
 🔄 **Estado del sistema:**
 • Peticiones activas: ${activeRequests}
 • Cola de espera: ${metrics.queueLength}
-• Sesiones activas: ${userSessions.size}`;
+• Sesiones activas: ${userSessions.size}
+
+🕐 **Hora local Bolivia:** ${getBoliviaTime().toLocaleString('es-BO')}`;
 
     bot.sendMessage(chatId, reportMessage, { parse_mode: 'Markdown' });
 });
@@ -837,20 +870,22 @@ setInterval(async () => {
     // Limpiar datos antiguos (conservar solo hoy y ayer)
     cleanOldData();
 
-    // Log de estado
+    // Log de estado con hora de Bolivia
     const today = getTodayDate();
     const todayData = metrics.dailyRecharges.get(today) || { amount: 0, count: 0 };
-    console.log(`📊 Estado: Hoy Bs ${todayData.amount.toFixed(2)} (${todayData.count} recargas) | Páginas: ${activePagesCount} | Sesiones: ${userSessions.size}`);
+    const boliviaTime = getBoliviaTime();
+    console.log(`📊 Estado Bolivia (${boliviaTime.toLocaleString('es-BO')}): Hoy Bs ${todayData.amount.toFixed(2)} (${todayData.count} recargas) | Páginas: ${activePagesCount} | Sesiones: ${userSessions.size}`);
 }, 3600000); // Cada hora
 
 // Manejo de cierre graceful
 process.on('SIGINT', async () => {
     console.log('🔄 Cerrando servidor...');
 
-    // Mostrar estadísticas finales
+    // Mostrar estadísticas finales con hora de Bolivia
     const today = getTodayDate();
     const todayData = metrics.dailyRecharges.get(today) || { amount: 0, count: 0 };
-    console.log(`📊 Estadísticas finales del día: Bs ${todayData.amount.toFixed(2)} en ${todayData.count} recargas`);
+    const boliviaTime = getBoliviaTime();
+    console.log(`📊 Estadísticas finales del día (Bolivia ${boliviaTime.toLocaleString('es-BO')}): Bs ${todayData.amount.toFixed(2)} en ${todayData.count} recargas`);
 
     // Cerrar todas las páginas
     for (const page of pagePool) {
@@ -868,4 +903,5 @@ process.on('SIGINT', async () => {
     process.exit();
 });
 
-console.log('🚀 Bot iniciado - Optimizado para 75-100 usuarios simultáneos con verificación de comprobantes');
+console.log(`🚀 Bot iniciado con zona horaria Bolivia (UTC-4) - ${getBoliviaTime().toLocaleString('es-BO')}`);
+console.log('⚡ Optimizado para 75-100 usuarios simultáneos con verificación de comprobantes');
