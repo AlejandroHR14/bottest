@@ -410,16 +410,35 @@ async function validateReceipt(filePath, expectedAmount, paymentRequestTime) {
         console.log(`Buscando fechas: ${todayFormatted}, ${todaySpanish1}, ${todaySpanish5}, ${todaySpanish10}`);
 
         // 4. Validar tiempo (máximo 5 minutos después de la solicitud)
-        // Extraer la hora del texto (formato común: HH:MM:SS o HH:MM)
-        const timeRegex = /(\d{1,2}):(\d{2}):?(\d{2})?/g;
-        const timeMatches = [...text.matchAll(timeRegex)];
+        // Extraer la hora del texto (formato común: HH:MM:SS, HH:MM, formato 12h con AM/PM)
+        const timeRegex12h = /(\d{1,2}):(\d{2}):?(\d{2})?\s*(AM|PM)/gi;
+        const timeRegex24h = /(\d{1,2}):(\d{2}):?(\d{2})?/g;
+
+        // Primero buscar formato 12 horas (AM/PM)
+        let timeMatches = [...text.matchAll(timeRegex12h)];
+        let is12HourFormat = timeMatches.length > 0;
+
+        // Si no encuentra formato 12h, buscar formato 24h
+        if (!is12HourFormat) {
+            timeMatches = [...text.matchAll(timeRegex24h)];
+        }
 
         if (timeMatches.length > 0) {
             // Obtener el último tiempo encontrado en el texto (probablemente el momento del pago)
             const lastTime = timeMatches[timeMatches.length - 1];
-            const hours = parseInt(lastTime[1]);
+            let hours = parseInt(lastTime[1]);
             const minutes = parseInt(lastTime[2]);
             const seconds = lastTime[3] ? parseInt(lastTime[3]) : 0;
+
+            // Convertir de 12h a 24h si es necesario
+            if (is12HourFormat) {
+                const ampm = lastTime[4].toUpperCase();
+                if (ampm === 'PM' && hours !== 12) {
+                    hours += 12;
+                } else if (ampm === 'AM' && hours === 12) {
+                    hours = 0;
+                }
+            }
 
             // Obtener la fecha/hora de cuando se solicitó el QR
             const paymentDate = typeof paymentRequestTime === 'number'
@@ -430,38 +449,34 @@ async function validateReceipt(filePath, expectedAmount, paymentRequestTime) {
             const receiptTime = new Date();
             receiptTime.setHours(hours, minutes, seconds, 0);
 
-            // CORRECCIÓN: Si el comprobante es de antes de la solicitud del QR,
-            // significa que necesitamos verificar si es del mismo día o no
-
-            // Si la diferencia es muy grande (más de 12 horas), probablemente sea de otro día
+            // Calcular diferencia en milisegundos
             let timeDifference = receiptTime.getTime() - paymentDate.getTime();
 
-            // Si la diferencia es negativa y muy grande, el comprobante podría ser del día siguiente
+            // Si la diferencia es muy grande (más de 12 horas), probablemente sea de otro día
             if (timeDifference < -12 * 60 * 60 * 1000) {
                 receiptTime.setDate(receiptTime.getDate() + 1);
                 timeDifference = receiptTime.getTime() - paymentDate.getTime();
-            }
-            // Si la diferencia es positiva y muy grande, el comprobante podría ser del día anterior
-            else if (timeDifference > 12 * 60 * 60 * 1000) {
+            } else if (timeDifference > 12 * 60 * 60 * 1000) {
                 receiptTime.setDate(receiptTime.getDate() - 1);
                 timeDifference = receiptTime.getTime() - paymentDate.getTime();
             }
 
             const differenceMinutes = Math.abs(timeDifference) / (1000 * 60);
 
-            // CORRECCIÓN: Validar que el comprobante sea DESPUÉS de la solicitud y dentro de 5 minutos
-            // El comprobante debe ser posterior a la solicitud del QR (timeDifference >= 0)
-            // Y debe estar dentro de los 5 minutos permitidos
-            validations.correctTime = (timeDifference >= 0 && differenceMinutes <= 5);
+            // CORRECCIÓN: Permitir comprobantes que sean hasta 2 minuto ANTES o hasta 5 minutos DESPUÉS
+            // Esto cubre casos donde el usuario tomó captura justo antes de que llegue la notificación
+            validations.correctTime = (timeDifference >= -120000 && differenceMinutes <= 5); // -120000ms = -2 minuto
 
+            console.log(`Formato detectado: ${is12HourFormat ? '12h (AM/PM)' : '24h'}`);
             console.log(`Hora QR solicitado: ${paymentDate.toLocaleTimeString()}`);
             console.log(`Hora del comprobante: ${receiptTime.toLocaleTimeString()}`);
-            console.log(`Diferencia: ${differenceMinutes.toFixed(2)} minutos`);
-            console.log(`Comprobante posterior al QR: ${timeDifference >= 0}`);
-            console.log(`Dentro de 5 minutos: ${differenceMinutes <= 5}`);
+            console.log(`Diferencia: ${(timeDifference / (1000 * 60)).toFixed(2)} minutos`);
+            console.log(`Diferencia absoluta: ${differenceMinutes.toFixed(2)} minutos`);
+            console.log(`Comprobante válido por tiempo: ${validations.correctTime}`);
         } else {
             // Si no se encuentra tiempo, asumir válido por seguridad
             validations.correctTime = true;
+            console.log('No se encontró hora en el comprobante, asumiendo válido');
         }
 
         // Resultado final
